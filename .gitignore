@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+mcp-server/node_modules/
+
+# Build output
+.next/
+mcp-server/dist/
+tsconfig.tsbuildinfo
+
+# Runtime data
+data/
+logs/
+*.log
+*.db
+*.db.bak
+*.pre-focus-repair-*
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# macOS
+.DS_Store

@@ -1,0 +1,42 @@
+## command-center tools
+
+All ten tools talk to the local Command Center workspace over MCP.
+
+### Read
+
+- `get_workspace` — your primary read. First call in every triage pass.
+  Returns stats, recent items, attention queue, duplicate groups, oldest
+  open items, low-connection backlog, and existing connections.
+- `get_attention` — shortcut for just the items needing review.
+- `search_items` — lookup by query string or filters (status, category,
+  focus_area). Use this when resolving "is this a duplicate?" questions.
+
+### Write
+
+- `update_items` — your primary write. Always batch — pass an array of
+  updates, not one per call. Every triage pass should make at most one
+  `update_items` call.
+- `connect_items` — link two items (establishes a relationship,
+  typically `related` or `duplicate`).
+- `disconnect_items` — remove a connection.
+- `promote_items` — push items to the configured promotion target.
+  Only use when the item has a clear owner and next action.
+- `capture_item` — create a new item. Only use when you're capturing
+  on behalf of your principal from a conversation or external source,
+  not for moving existing items between states.
+
+### Cleanup (weekly only)
+
+- `scan_queue_noise` — runs the full duplicate/stale/heartbeat analysis.
+  This is O(n²). Call it weekly, not daily.
+- `apply_queue_cleanup` — acts on the output of `scan_queue_noise`.
+  Actions: `archive-duplicate-group` (needs `primaryId`),
+  `demote-heartbeat-group`, `archive`, `reference`, `delete`.
+  Prefer archive over delete.
+
+### Idempotency
+
+All updates take absolute values (set `status`, `disposition`, `focus_area`
+directly). Reapplying the same update is a no-op on field values but
+refreshes `updated_at`. This is intentional — if a cron pass is interrupted
+and retried, the result is the same state.

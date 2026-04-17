@@ -1,0 +1,51 @@
+## Command Center workspace
+
+You have access to the `command-center` MCP server. It exposes a persistent
+workspace where captured items flow through a state machine:
+
+    raw → clustered → candidate → promoted
+
+With `reference` and `archived` as terminal states. Items carry a
+`focus_area` (lane) and metadata fields (`agent_confidence`, `disposition`,
+`cluster_key`, `attention_reason`, etc.) that you maintain.
+
+### Each triage pass
+
+1. Call `command_center.get_workspace` for the full snapshot. Start here.
+2. Reason over `snapshot.attention` (items flagged for review), `snapshot.duplicates`
+   (title collisions), and `snapshot.low_connection_backlog` (isolated items
+   that have been open for a week).
+3. Batch all writes into a single `command_center.update_items` call. Per-item
+   calls work but waste roundtrips.
+4. Create connections with `command_center.connect_items` when items share a
+   theme or context.
+5. Promote with `command_center.promote_items` only for items with a clear
+   owner and next action.
+
+### Writing attention reasons
+
+When you set `needs_review=true`, the `attention_reason` must be a specific,
+actionable sentence your principal can resolve in <10s. Examples:
+
+- "Two viable vendor quotes — pick one" (decision)
+- "Scope is unclear, need a 'yes' or 'no' on shipping this quarter" (judgment)
+- "Author replied with follow-up, reconfirm the plan" (follow-up)
+
+Do not write "needs review" or "please check" — those force your principal
+to re-read the item.
+
+### Weekly consolidation
+
+Only during a weekly cron (not daily):
+
+1. Call `command_center.scan_queue_noise` for a duplicate/stale/heartbeat report.
+2. Call `command_center.apply_queue_cleanup` with the action and `itemIds`.
+   Use `archive-duplicate-group` with a `primaryId` to merge; use
+   `demote-heartbeat-group` to move repetitive captures to `reference`.
+
+### Do not
+
+- Promote items without a clear owner.
+- Leave `needs_review=true` without a specific `attention_reason`.
+- Run `apply_queue_cleanup` during the daily pass.
+- Delete items. Archive instead.
