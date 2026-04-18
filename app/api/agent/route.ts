@@ -16,6 +16,7 @@ import {
 } from '@/lib/db'
 import { getAllConnections } from '@/lib/db'
 import { markItemPromoted, promoteItem, promotionEnabled } from '@/lib/promotion'
+import { devDetails } from '@/lib/api-errors'
 
 interface ItemUpdatePayload {
   id: number
@@ -188,7 +189,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Error applying agent workspace changes:', error)
     return NextResponse.json(
-      { error: 'Failed to apply agent workspace changes', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to apply agent workspace changes', details: devDetails(error) },
       { status: 500 }
     )
   }

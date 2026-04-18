@@ -1,5 +1,50 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { updateItem, deleteItem } from '@/lib/db'
+import {
+  updateItem,
+  deleteItem,
+  isValidFocusArea,
+  ITEM_CATEGORIES,
+  ITEM_DISPOSITIONS,
+  ITEM_STATUSES,
+} from '@/lib/db'
+import { devDetails } from '@/lib/api-errors'
+
+const ALLOWED_BULK_FIELDS = [
+  'title',
+  'content',
+  'category',
+  'tags',
+  'status',
+  'summary',
+  'reviewed_at',
+  'agent_confidence',
+  'disposition',
+  'duplicate_of',
+  'cluster_key',
+  'promotion_target',
+  'needs_review',
+  'attention_reason',
+  'focus_area',
+  'focus_score',
+] as const
+
+// Same validation as POST/PUT /api/items — applied to the single `updates`
+// object that bulk PUT broadcasts across all target ids.
+function validateBulkUpdates(updates: Record<string, unknown>): string | null {
+  if (updates.status !== undefined && !ITEM_STATUSES.includes(updates.status as any)) {
+    return `invalid status: ${updates.status}`
+  }
+  if (updates.category !== undefined && !ITEM_CATEGORIES.includes(updates.category as any)) {
+    return `invalid category: ${updates.category}`
+  }
+  if (updates.disposition !== undefined && updates.disposition !== null && !ITEM_DISPOSITIONS.includes(updates.disposition as any)) {
+    return `invalid disposition: ${updates.disposition}`
+  }
+  if (updates.focus_area !== undefined && !isValidFocusArea(updates.focus_area as string)) {
+    return `invalid focus_area: ${updates.focus_area}`
+  }
+  return null
+}
 
 // POST /api/bulk/update - Update multiple items at once
 export async function PUT(request: NextRequest) {
@@ -21,35 +66,20 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Validate allowed update fields
-    const allowedFields = [
-      'title',
-      'content',
-      'category',
-      'tags',
-      'status',
-      'summary',
-      'reviewed_at',
-      'agent_confidence',
-      'disposition',
-      'duplicate_of',
-      'cluster_key',
-      'promotion_target',
-      'needs_review',
-      'attention_reason',
-      'focus_area',
-      'focus_score',
-    ]
-    const invalidFields = Object.keys(updates).filter(key => !allowedFields.includes(key))
-    
+    const invalidFields = Object.keys(updates).filter((key) => !ALLOWED_BULK_FIELDS.includes(key as any))
+
     if (invalidFields.length > 0) {
       return NextResponse.json(
-        { error: `Invalid update fields: ${invalidFields.join(', ')}. Allowed: ${allowedFields.join(', ')}` },
+        { error: `Invalid update fields: ${invalidFields.join(', ')}. Allowed: ${ALLOWED_BULK_FIELDS.join(', ')}` },
         { status: 400 }
       )
     }
 
-    // Update all items
+    const enumError = validateBulkUpdates(updates)
+    if (enumError) {
+      return NextResponse.json({ error: enumError }, { status: 400 })
+    }
+
     const results = await Promise.all(
       ids.map(async (id: number) => {
         try {
@@ -61,23 +91,22 @@ export async function PUT(request: NextRequest) {
       })
     )
 
-    const succeeded = results.filter(r => r.success).length
-    const failed = results.filter(r => !r.success)
+    const succeeded = results.filter((r) => r.success).length
+    const failed = results.filter((r) => !r.success)
 
     return NextResponse.json({
       success: true,
       summary: {
         total: ids.length,
         succeeded,
-        failed: failed.length
+        failed: failed.length,
       },
-      results
+      results,
     })
-
   } catch (error) {
     console.error('Error in bulk update:', error)
     return NextResponse.json(
-      { error: 'Failed to perform bulk update', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to perform bulk update', details: devDetails(error) },
       { status: 500 }
     )
   }
@@ -124,7 +153,7 @@ export async function DELETE(request: NextRequest) {
   } catch (error) {
     console.error('Error in bulk delete:', error)
     return NextResponse.json(
-      { error: 'Failed to perform bulk delete', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Failed to perform bulk delete', details: devDetails(error) },
       { status: 500 }
     )
   }

@@ -115,29 +115,39 @@ export async function buildQueueCleanerReport(): Promise<QueueCleanerReport> {
   const duplicateGroups: CleanerDuplicateGroup[] = []
   const seenPairs = new Set<string>()
 
+  // Pre-compute normalized titles and token sets once per item.
+  // Previously these were recomputed inside the O(n²) comparison plus inside
+  // the grouping filter — effectively O(n³) calls to normalizeTitle on large
+  // workspaces. One pass keeps the comparison work true O(n²) with cheap
+  // string equality and set intersections.
+  const normalized: string[] = openItems.map((item) => normalizeTitle(item.title))
+  const tokenSets: Set<string>[] = openItems.map((item) => toTokenSet(item.title))
+
   for (let i = 0; i < openItems.length; i++) {
     for (let j = i + 1; j < openItems.length; j++) {
+      const sameExactTitle = normalized[i] === normalized[j]
+      const pairSimilarity = sameExactTitle ? 1 : jaccard(tokenSets[i], tokenSets[j])
+      const similar = pairSimilarity >= 0.8
+      if (!sameExactTitle && !similar) continue
+
       const a = openItems[i]
       const b = openItems[j]
-      const sameExactTitle = normalizeTitle(a.title) === normalizeTitle(b.title)
-      const similar = jaccard(toTokenSet(a.title), toTokenSet(b.title)) >= 0.8
-      if (!sameExactTitle && !similar) continue
 
       const key = [a.id, b.id].sort((x, y) => x - y).join(':')
       if (seenPairs.has(key)) continue
       seenPairs.add(key)
 
-      const grouped = openItems.filter((candidate) =>
-        normalizeTitle(candidate.title) === normalizeTitle(a.title) ||
-        jaccard(toTokenSet(candidate.title), toTokenSet(a.title)) >= 0.8
-      )
+      const groupedIndexes: number[] = []
+      for (let k = 0; k < openItems.length; k++) {
+        if (normalized[k] === normalized[i] || jaccard(tokenSets[k], tokenSets[i]) >= 0.8) {
+          groupedIndexes.push(k)
+        }
+      }
 
-      if (grouped.length < 2) continue
+      if (groupedIndexes.length < 2) continue
 
-      const uniqueIds = [...new Set(grouped.map((item) => item.id))]
-      const fullGroup = uniqueIds
-        .map((id) => openItems.find((item) => item.id === id))
-        .filter(Boolean) as Item[]
+      const uniqueIds = [...new Set(groupedIndexes.map((k) => openItems[k].id))]
+      const fullGroup = groupedIndexes.map((k) => openItems[k])
 
       const groupKey = uniqueIds.slice().sort((x, y) => x - y).join('-')
       if (duplicateGroups.some((group) => group.key === groupKey)) continue
@@ -145,12 +155,14 @@ export async function buildQueueCleanerReport(): Promise<QueueCleanerReport> {
       const primary = pickPrimary(fullGroup)
       duplicateGroups.push({
         key: groupKey,
-        normalizedTitle: normalizeTitle(primary.title),
-        similarity: sameExactTitle ? 1 : jaccard(toTokenSet(a.title), toTokenSet(b.title)),
+        normalizedTitle: normalized[i],
+        similarity: pairSimilarity,
         itemIds: uniqueIds,
         items: fullGroup.sort((x, y) => new Date(x.created_at).getTime() - new Date(y.created_at).getTime()),
         suggestedPrimaryId: primary.id,
-        reason: sameExactTitle ? 'Exact title match across open items.' : 'Highly similar titles likely represent the same idea or stale task.',
+        reason: sameExactTitle
+          ? 'Exact title match across open items.'
+          : 'Highly similar titles likely represent the same idea or stale task.',
       })
     }
   }
