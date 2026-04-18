@@ -6,6 +6,8 @@ Command Center is an opinionated workspace your AI agent drives on a schedule. Y
 
 It ships with a Next.js dashboard, a SQLite-backed store, a REST API, and an MCP server so agents can operate natively. A reference [openclaw](https://docs.openclaw.ai) setup is included for cron-driven daily triage and weekly consolidation.
 
+> This is a personal project I maintain on hobby time. Fork it, steal ideas, open issues — but there's no SLA. PRs welcome.
+
 ## What it looks like
 
 - **Dashboard** (`http://localhost:3005`): exception-first view of your workspace — today's priorities, blockers, stale items, lane status, pending decisions, waiting-on follow-ups, 24h pulse.
@@ -16,7 +18,7 @@ It ships with a Next.js dashboard, a SQLite-backed store, a REST API, and an MCP
 ## Quickstart
 
 ```bash
-git clone https://github.com/YOUR_ORG/command-center.git
+git clone https://github.com/jendrypto/command-center.git
 cd command-center
 
 npm install

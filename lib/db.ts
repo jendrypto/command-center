@@ -1,9 +1,17 @@
 import sqlite3 from 'sqlite3'
-import { join } from 'path'
+import { join, dirname } from 'path'
+import { existsSync, mkdirSync } from 'fs'
 import { promisify } from 'util'
 import { config, getDefaultFocusAreaId, getFocusAreaIds, getFocusAreaPriority, isValidFocusArea } from './config'
 
 const DB_PATH = join(process.cwd(), 'data', 'command-center.db')
+
+function ensureDbDir() {
+  const dir = dirname(DB_PATH)
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+  }
+}
 
 export const ITEM_CATEGORIES = ['ideas', 'conversations', 'research', 'bookmarks', 'decisions'] as const
 export const ITEM_STATUSES = ['raw', 'clustered', 'candidate', 'promoted', 'reference', 'archived'] as const
@@ -83,6 +91,7 @@ export interface Connection {
 
 export async function getDb(): Promise<sqlite3.Database> {
   if (!db) {
+    ensureDbDir()
     db = new sqlite3.Database(DB_PATH)
     await initDb()
   }
