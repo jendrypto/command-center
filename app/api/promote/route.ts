@@ -31,7 +31,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const item = await getItemById(parseInt(item_id, 10))
+    const parsedId = Number.parseInt(String(item_id), 10)
+    if (!Number.isFinite(parsedId)) {
+      return NextResponse.json({ error: 'Invalid item_id' }, { status: 400 })
+    }
+    const item = await getItemById(parsedId)
     if (!item) {
       return NextResponse.json({ error: 'Item not found' }, { status: 404 })
     }

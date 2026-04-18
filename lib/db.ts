@@ -450,7 +450,16 @@ export async function getItemById(id: number): Promise<Item | null> {
   return parseItem(row)
 }
 
-export async function getAllItems(): Promise<Item[]> {
+/**
+ * Hard cap on how many items we'll hand back at once. Protects the dashboard
+ * and the MCP server from OOM if the workspace grows large. Callers that need
+ * more should paginate or filter by status/lane. Configurable via
+ * COMMAND_CENTER_MAX_ITEMS env var if you know what you're doing.
+ */
+export const MAX_ITEMS_PER_PAGE = Number(process.env.COMMAND_CENTER_MAX_ITEMS) || 2000
+
+export async function getAllItems(limit: number = MAX_ITEMS_PER_PAGE): Promise<Item[]> {
+  const capped = Math.max(1, Math.min(limit, MAX_ITEMS_PER_PAGE))
   const rows = await query<any>(
     `SELECT * FROM items
      ORDER BY
@@ -463,7 +472,9 @@ export async function getAllItems(): Promise<Item[]> {
          ELSE 6
        END,
        focus_score DESC,
-       datetime(updated_at) DESC`
+       datetime(updated_at) DESC
+     LIMIT ?`,
+    [capped]
   )
   return rows.map(parseItem)
 }

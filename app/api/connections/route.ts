@@ -8,16 +8,26 @@ import {
   Connection,
 } from '@/lib/db'
 
+function parseFiniteInt(value: string | null): number | null {
+  if (!value) return null
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 // GET /api/connections - List connections
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const itemId = searchParams.get('itemId')
-    
+
     let connections: Connection[]
-    
+
     if (itemId) {
-      connections = await getConnectionsForItem(parseInt(itemId))
+      const parsed = parseFiniteInt(itemId)
+      if (parsed === null) {
+        return NextResponse.json({ error: 'Invalid itemId' }, { status: 400 })
+      }
+      connections = await getConnectionsForItem(parsed)
     } else {
       connections = await getAllConnections()
     }
@@ -86,20 +96,29 @@ export async function DELETE(request: NextRequest) {
     const targetId = searchParams.get('target')
     
     if (id) {
-      const success = await deleteConnection(parseInt(id))
-      
+      const parsed = parseFiniteInt(id)
+      if (parsed === null) {
+        return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+      }
+      const success = await deleteConnection(parsed)
+
       if (!success) {
         return NextResponse.json(
           { error: 'Connection not found' },
           { status: 404 }
         )
       }
-      
+
       return NextResponse.json({ success: true })
     }
-    
+
     if (sourceId && targetId) {
-      const success = await deleteConnectionBetween(parseInt(sourceId), parseInt(targetId))
+      const src = parseFiniteInt(sourceId)
+      const tgt = parseFiniteInt(targetId)
+      if (src === null || tgt === null) {
+        return NextResponse.json({ error: 'Invalid source or target' }, { status: 400 })
+      }
+      const success = await deleteConnectionBetween(src, tgt)
       
       if (!success) {
         return NextResponse.json(

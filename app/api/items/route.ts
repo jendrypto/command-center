@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') as Item['status'] | null
     const category = searchParams.get('category') as Item['category'] | null
     const filter = searchParams.get('filter')
+    const limitParam = searchParams.get('limit')
+    const limit = limitParam ? Number(limitParam) : undefined
 
     let items: Item[]
 
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
     } else if (filter === 'attention') {
       items = await getItemsNeedingAttention()
     } else {
-      items = await getAllItems()
+      items = await getAllItems(limit && Number.isFinite(limit) ? limit : undefined)
     }
 
     const itemsWithConnections = await Promise.all(
@@ -67,6 +69,18 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Length limits on user-supplied strings. The dashboard renders them unpaged
+// in a few places; without limits, one bad row can stall the UI and blow up
+// response payloads. Adjust in a fork if your agent captures longer bodies.
+const MAX_TITLE_LEN = 500
+const MAX_CONTENT_LEN = 100_000
+const MAX_SUMMARY_LEN = 2_000
+const MAX_ATTENTION_REASON_LEN = 1_000
+
+function tooLong(value: unknown, limit: number): boolean {
+  return typeof value === 'string' && value.length > limit
+}
+
 // POST /api/items - Create new item
 export async function POST(request: NextRequest) {
   try {
@@ -78,6 +92,20 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields: title, content, category' },
         { status: 400 }
       )
+    }
+
+    if (tooLong(title, MAX_TITLE_LEN)) {
+      return NextResponse.json({ error: `title exceeds ${MAX_TITLE_LEN} chars` }, { status: 400 })
+    }
+    const contentForLenCheck = typeof content === 'string' ? content : JSON.stringify(content)
+    if (tooLong(contentForLenCheck, MAX_CONTENT_LEN)) {
+      return NextResponse.json({ error: `content exceeds ${MAX_CONTENT_LEN} chars` }, { status: 400 })
+    }
+    if (tooLong(body.summary, MAX_SUMMARY_LEN)) {
+      return NextResponse.json({ error: `summary exceeds ${MAX_SUMMARY_LEN} chars` }, { status: 400 })
+    }
+    if (tooLong(body.attention_reason, MAX_ATTENTION_REASON_LEN)) {
+      return NextResponse.json({ error: `attention_reason exceeds ${MAX_ATTENTION_REASON_LEN} chars` }, { status: 400 })
     }
 
     if (!ITEM_CATEGORIES.includes(category)) {
@@ -170,6 +198,19 @@ export async function PUT(request: NextRequest) {
       updates.content = JSON.stringify(updates.content)
     }
 
+    if (tooLong(updates.title, MAX_TITLE_LEN)) {
+      return NextResponse.json({ error: `title exceeds ${MAX_TITLE_LEN} chars` }, { status: 400 })
+    }
+    if (tooLong(updates.content, MAX_CONTENT_LEN)) {
+      return NextResponse.json({ error: `content exceeds ${MAX_CONTENT_LEN} chars` }, { status: 400 })
+    }
+    if (tooLong(updates.summary, MAX_SUMMARY_LEN)) {
+      return NextResponse.json({ error: `summary exceeds ${MAX_SUMMARY_LEN} chars` }, { status: 400 })
+    }
+    if (tooLong(updates.attention_reason, MAX_ATTENTION_REASON_LEN)) {
+      return NextResponse.json({ error: `attention_reason exceeds ${MAX_ATTENTION_REASON_LEN} chars` }, { status: 400 })
+    }
+
     if (updates.content && updates.autoAnalyze) {
       const autoTags = autoTagContent(updates.title || '', updates.content)
       updates.tags = Array.from(new Set([...(updates.tags || []), ...autoTags]))
@@ -245,7 +286,11 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    const success = await deleteItem(parseInt(id))
+    const parsed = Number.parseInt(id, 10)
+    if (!Number.isFinite(parsed)) {
+      return NextResponse.json({ error: 'Invalid id' }, { status: 400 })
+    }
+    const success = await deleteItem(parsed)
 
     if (!success) {
       return NextResponse.json(

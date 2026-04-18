@@ -8,6 +8,14 @@ It ships with a Next.js dashboard, a SQLite-backed store, a REST API, and an MCP
 
 > This is a personal project I maintain on hobby time. Fork it, steal ideas, open issues — but there's no SLA. PRs welcome.
 
+## ⚠ Security — read before deploying
+
+Command Center has **no authentication** by design. It assumes you are the only caller. The default dev/start scripts bind to `127.0.0.1` so nothing outside your machine can reach the API.
+
+**Do not expose this to a public network.** Running it on a public IP, or forwarding the port without auth in front, lets anyone on the internet read, modify, delete, and promote your captures — and trigger outbound webhook calls from your server.
+
+For remote access, tunnel over SSH (`ssh -L 3005:localhost:3005 …`) or put it behind a reverse proxy that enforces auth (Caddy + basicauth, Tailscale, Cloudflare Access, etc.). Don't put captures you'd be uncomfortable sharing into the workspace — the promoted item's full `content` is sent to the webhook target.
+
 ## What it looks like
 
 - **Dashboard** (`http://localhost:3005`): exception-first view of your workspace — today's priorities, blockers, stale items, lane status, pending decisions, waiting-on follow-ups, 24h pulse.
