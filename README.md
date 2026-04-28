@@ -1,5 +1,7 @@
 # Command Center
 
+![Command Center — Operator Dashboard](docs/portal.png)
+
 > A command space for your agent. You review exceptions, it does the rest.
 
 Command Center is an opinionated workspace your AI agent drives on a schedule. Your agent captures, clusters, triages, promotes, and archives items through a defined state machine. You get a dashboard for inspecting exceptions, duplicates, and progress — not a manual inbox to clean.
