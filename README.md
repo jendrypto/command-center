@@ -6,7 +6,7 @@
 
 Command Center is an opinionated workspace your AI agent drives on a schedule. Your agent captures, clusters, triages, promotes, and archives items through a defined state machine. You get a dashboard for inspecting exceptions, duplicates, and progress — not a manual inbox to clean.
 
-It ships with a Next.js dashboard, a SQLite-backed store, a REST API, and an MCP server so agents can operate natively. A reference [openclaw](https://docs.openclaw.ai) setup is included for cron-driven daily triage and weekly consolidation.
+It ships with a Next.js dashboard, a SQLite-backed store, a REST API, and an MCP server so agents can operate natively. Reference setups are included for [Hermes Agent](https://hermes-agent.nousresearch.com/docs/) and [OpenClaw](https://docs.openclaw.ai), both covering MCP registration plus cron-driven daily triage and weekly consolidation.
 
 > This is a personal project I maintain on hobby time. Fork it, steal ideas, open issues — but there's no SLA. PRs welcome.
 
@@ -23,6 +23,7 @@ For remote access, tunnel over SSH (`ssh -L 3005:localhost:3005 …`) or put it 
 - **Dashboard** (`http://localhost:3005`): exception-first view of your workspace — today's priorities, blockers, stale items, lane status, pending decisions, waiting-on follow-ups, 24h pulse.
 - **State machine**: every item flows `raw → clustered → candidate → promoted`, with `reference` and `archived` as terminal states.
 - **Lanes**: items are sorted into configurable strategic lanes (Work / Personal / Later by default, or whatever you define).
+- **Outcome loop**: agents can track owners, revisit dates, decisions needed, outcomes, evidence, supersession, and execution handoffs.
 - **MCP tools**: `get_workspace`, `update_items`, `promote_items`, `scan_queue_noise`, and six more — all thin wrappers over the REST API so agents can read and write the whole workspace in one trip.
 
 ## Quickstart
@@ -42,9 +43,32 @@ npm run dev
 
 Open `http://localhost:3005`. You'll see an empty dashboard.
 
-## Wire your agent (openclaw)
+## Wire your agent
 
-One-time setup for openclaw users — see [examples/openclaw/README.md](examples/openclaw/README.md) for the full walkthrough. Short version:
+Command Center is runtime-agnostic: MCP-aware agents can use the MCP server, and any agent can use the REST API. The examples folder includes two maintained references:
+
+- [Hermes Agent](examples/hermes/README.md) — MCP registration with `hermes mcp add`, snippets for `AGENTS.md`/`TOOLS.md`, and `hermes cron create` jobs.
+- [OpenClaw](examples/openclaw/README.md) — MCP registration with `openclaw mcp set`, snippets for workspace files, and `openclaw cron add` jobs.
+
+### Hermes Agent
+
+One-time setup for Hermes users — see [examples/hermes/README.md](examples/hermes/README.md) for the full walkthrough. Short version:
+
+```bash
+npm run mcp:build
+
+./examples/hermes/install-mcp.sh
+
+# Paste the Hermes snippets into your workspace
+# (AGENTS.md, TOOLS.md)
+
+./examples/hermes/install-daily-triage.sh
+./examples/hermes/install-weekly-consolidation.sh
+```
+
+### OpenClaw
+
+One-time setup for OpenClaw users — see [examples/openclaw/README.md](examples/openclaw/README.md) for the full walkthrough. Short version:
 
 ```bash
 # Build the MCP server
@@ -65,7 +89,7 @@ Your agent will run a triage pass every weekday morning. You open the dashboard 
 
 ## Wire a different agent
 
-The MCP server speaks standard Model Context Protocol over stdio, so any MCP-aware client (Claude Desktop, Claude Code, Cursor, Zed, openclaw, etc.) can use it. For non-MCP agents, the REST API at `/api/agent` is a straight JSON contract — see [HOWTO.md](HOWTO.md#custom-agents).
+The MCP server speaks standard Model Context Protocol over stdio, so any MCP-aware client (Hermes, OpenClaw, Claude Desktop, Claude Code, Cursor, Zed, etc.) can use it. For non-MCP agents, the REST API at `/api/agent` is a straight JSON contract — see [HOWTO.md](HOWTO.md#custom-agents).
 
 ## Configuration
 
@@ -126,12 +150,22 @@ The agent writes these fields on every triage pass. Your dashboard surfaces them
 | `attention_reason` | Short sentence explaining *why* it needs review |
 | `focus_area` | Which lane this belongs to (from config) |
 | `focus_score` | Priority score (derived from lane by default) |
+| `owner` | Person/agent responsible for the next check |
+| `revisit_at` | ISO datetime when the item should resurface |
+| `decision_needed` | The unresolved question blocking closure |
+| `outcome_status` | `open`, `decided`, `done`, `blocked`, `superseded`, or `dropped` |
+| `outcome_note` | Human-readable result of the loop |
+| `evidence` | Link, issue id, commit, note, or other proof |
+| `superseded_by` | Item id that replaced this item |
+| `execution_target` | Downstream queue/lane/run target |
+| `execution_ref` | External ticket/run/reference id |
+| `execution_url` | External ticket/run/reference URL |
 
 ## API contract
 
 For full MCP/REST contracts see [HOWTO.md](HOWTO.md#api-contract). Quick reference:
 
-- `GET /api/agent` — workspace snapshot (stats, attention queue, duplicates, backlog, connections)
+- `GET /api/agent` — workspace snapshot (stats, active plan items, attention queue, duplicates, backlog, connections)
 - `POST /api/agent` — batch updates/connections/disconnects/promotions in one call
 - `GET /api/queue-cleaner` — noise report (duplicates, stale groups, heartbeat clutter, orphans)
 - `POST /api/queue-cleaner` — cleanup actions
@@ -145,7 +179,8 @@ command-center/
 ├── components/          # React UI
 ├── lib/                 # Core logic (db, config, promotion, queue-cleaner)
 ├── mcp-server/          # Stdio MCP server wrapping the REST API
-├── examples/openclaw/   # Drop-in bootstrap snippets + cron scripts for openclaw
+├── examples/hermes/     # Drop-in bootstrap snippets + cron scripts for Hermes
+├── examples/openclaw/   # Drop-in bootstrap snippets + cron scripts for OpenClaw
 ├── command-space.config.ts   # Per-install config (edit me)
 ├── .env.example
 ├── HOWTO.md             # Extending: adapters, agents, API
@@ -156,7 +191,8 @@ command-center/
 
 See [HOWTO.md](HOWTO.md):
 - Writing a custom promotion adapter (Notion, Linear, your own system)
-- Using a non-openclaw agent (raw REST contract)
+- Using Hermes, OpenClaw, or another agent runtime
+- Using a raw REST contract
 - Adding capture sources (browser, CLI, email-in)
 - Customizing the dashboard
 

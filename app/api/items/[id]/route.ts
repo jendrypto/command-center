@@ -6,6 +6,7 @@ import {
   ITEM_CATEGORIES,
   ITEM_DISPOSITIONS,
   ITEM_STATUSES,
+  OUTCOME_STATUSES,
   updateItem,
   deleteItem,
 } from '@/lib/db'
@@ -75,6 +76,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     if (updates.focus_area && !isValidFocusArea(updates.focus_area)) {
       return NextResponse.json({ error: `Invalid focus_area: ${updates.focus_area}` }, { status: 400 })
+    }
+
+    if (updates.outcome_status && !OUTCOME_STATUSES.includes(updates.outcome_status)) {
+      return NextResponse.json({ error: `Invalid outcome_status: ${updates.outcome_status}` }, { status: 400 })
     }
 
     if (updates.focus_area && updates.focus_score === undefined) {

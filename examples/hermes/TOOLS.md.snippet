@@ -1,0 +1,23 @@
+## Command Center MCP
+
+Command Center runs locally at `http://localhost:3005` and is exposed to Hermes as the `command-center` MCP server.
+
+Primary tools:
+
+- `command_center.get_workspace` — full snapshot, including stats, active plan items, attention queue, duplicate groups, oldest open items, low-connection backlog, and connections
+- `command_center.update_items` — batch status/metadata/outcome updates
+- `command_center.connect_items` / `command_center.disconnect_items` — manage relationships
+- `command_center.promote_items` — mark concrete handoffs and invoke the configured promotion adapter
+- `command_center.capture_item` — create a new item
+- `command_center.scan_queue_noise` / `command_center.apply_queue_cleanup` — weekly cleanup only
+
+Important fields:
+
+- State: `status`, `disposition`, `needs_review`, `attention_reason`
+- Clustering: `cluster_key`, `duplicate_of`
+- Priority: `focus_area`, `focus_score`
+- Outcome loop: `owner`, `revisit_at`, `decision_needed`, `outcome_status`, `outcome_note`, `evidence`, `superseded_by`
+- Execution handoff: `execution_target`, `execution_ref`, `execution_url`
+
+Daily triage should handle active plan items and attention items first. Weekly consolidation may run the queue-cleaner tools and close old outcomes.
+

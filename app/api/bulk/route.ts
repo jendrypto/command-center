@@ -6,6 +6,7 @@ import {
   ITEM_CATEGORIES,
   ITEM_DISPOSITIONS,
   ITEM_STATUSES,
+  OUTCOME_STATUSES,
 } from '@/lib/db'
 import { devDetails } from '@/lib/api-errors'
 
@@ -26,6 +27,16 @@ const ALLOWED_BULK_FIELDS = [
   'attention_reason',
   'focus_area',
   'focus_score',
+  'owner',
+  'revisit_at',
+  'decision_needed',
+  'outcome_status',
+  'outcome_note',
+  'evidence',
+  'superseded_by',
+  'execution_target',
+  'execution_ref',
+  'execution_url',
 ] as const
 
 // Same validation as POST/PUT /api/items — applied to the single `updates`
@@ -42,6 +53,9 @@ function validateBulkUpdates(updates: Record<string, unknown>): string | null {
   }
   if (updates.focus_area !== undefined && !isValidFocusArea(updates.focus_area as string)) {
     return `invalid focus_area: ${updates.focus_area}`
+  }
+  if (updates.outcome_status !== undefined && updates.outcome_status !== null && !OUTCOME_STATUSES.includes(updates.outcome_status as any)) {
+    return `invalid outcome_status: ${updates.outcome_status}`
   }
   return null
 }

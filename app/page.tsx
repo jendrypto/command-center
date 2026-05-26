@@ -21,7 +21,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import config from '@/command-space.config'
-import { FocusArea, Item } from '@/lib/db'
+import { Item } from '@/lib/db'
 import { getAgeIndicator } from '@/lib/ai'
 import { useNotifications } from '@/lib/useNotifications'
 import CardView from '@/components/CardView'

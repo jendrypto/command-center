@@ -21,7 +21,7 @@ import {
   X,
 } from 'lucide-react'
 import config from '@/command-space.config'
-import { FocusArea, Item, ItemDisposition, ItemStatus } from '@/lib/db'
+import { FocusArea, Item, ItemDisposition, ItemStatus, OutcomeStatus } from '@/lib/db'
 import { findPotentialConnections, getAgeIndicator, extractKeyPoints } from '@/lib/ai'
 
 interface DetailPanelProps {
@@ -66,7 +66,23 @@ const dispositionLabels: Record<ItemDisposition, string> = {
   merge_duplicate: 'Merge Duplicate',
 }
 
+const outcomeLabels: Record<OutcomeStatus, string> = {
+  open: 'Open',
+  decided: 'Decided',
+  done: 'Done',
+  blocked: 'Blocked',
+  superseded: 'Superseded',
+  dropped: 'Dropped',
+}
+
 const PROMOTION_ENABLED = config.promotionTarget.type !== 'none'
+
+function toDatetimeLocal(value?: string | null) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString().slice(0, 16)
+}
 
 export default function DetailPanel({ item, allItems, onClose, onUpdate, onDelete }: DetailPanelProps) {
   const [isEditing, setIsEditing] = useState(false)
@@ -79,6 +95,15 @@ export default function DetailPanel({ item, allItems, onClose, onUpdate, onDelet
   const [editedAttentionReason, setEditedAttentionReason] = useState(item.attention_reason || '')
   const [editedClusterKey, setEditedClusterKey] = useState(item.cluster_key || '')
   const [editedFocusArea, setEditedFocusArea] = useState<FocusArea>(item.focus_area)
+  const [editedOwner, setEditedOwner] = useState(item.owner || '')
+  const [editedRevisitAt, setEditedRevisitAt] = useState(toDatetimeLocal(item.revisit_at))
+  const [editedDecisionNeeded, setEditedDecisionNeeded] = useState(item.decision_needed || '')
+  const [editedOutcomeStatus, setEditedOutcomeStatus] = useState<OutcomeStatus | ''>(item.outcome_status || '')
+  const [editedOutcomeNote, setEditedOutcomeNote] = useState(item.outcome_note || '')
+  const [editedEvidence, setEditedEvidence] = useState(item.evidence || '')
+  const [editedExecutionTarget, setEditedExecutionTarget] = useState(item.execution_target || item.promotion_target || '')
+  const [editedExecutionRef, setEditedExecutionRef] = useState(item.execution_ref || '')
+  const [editedExecutionUrl, setEditedExecutionUrl] = useState(item.execution_url || '')
   const [connections, setConnections] = useState<any[]>([])
   const [relatedItems, setRelatedItems] = useState<Array<{ item: Item; reason: string }>>([])
   const [isPromoting, setIsPromoting] = useState(false)
@@ -93,6 +118,27 @@ export default function DetailPanel({ item, allItems, onClose, onUpdate, onDelet
     () => Object.fromEntries(config.focusAreas.map((area) => [area.id, area.label])),
     []
   )
+
+  useEffect(() => {
+    setEditedTitle(item.title)
+    setEditedContent(item.content)
+    setEditedTags(item.tags.join(', '))
+    setEditedStatus(item.status)
+    setEditedDisposition(item.disposition || '')
+    setEditedNeedsReview(item.needs_review)
+    setEditedAttentionReason(item.attention_reason || '')
+    setEditedClusterKey(item.cluster_key || '')
+    setEditedFocusArea(item.focus_area)
+    setEditedOwner(item.owner || '')
+    setEditedRevisitAt(toDatetimeLocal(item.revisit_at))
+    setEditedDecisionNeeded(item.decision_needed || '')
+    setEditedOutcomeStatus(item.outcome_status || '')
+    setEditedOutcomeNote(item.outcome_note || '')
+    setEditedEvidence(item.evidence || '')
+    setEditedExecutionTarget(item.execution_target || item.promotion_target || '')
+    setEditedExecutionRef(item.execution_ref || '')
+    setEditedExecutionUrl(item.execution_url || '')
+  }, [item])
 
   useEffect(() => {
     const fetchData = async () => {
@@ -133,6 +179,15 @@ export default function DetailPanel({ item, allItems, onClose, onUpdate, onDelet
       attention_reason: editedAttentionReason || null,
       cluster_key: editedClusterKey || null,
       focus_area: editedFocusArea,
+      owner: editedOwner || null,
+      revisit_at: editedRevisitAt ? new Date(editedRevisitAt).toISOString() : null,
+      decision_needed: editedDecisionNeeded || null,
+      outcome_status: editedOutcomeStatus || null,
+      outcome_note: editedOutcomeNote || null,
+      evidence: editedEvidence || null,
+      execution_target: editedExecutionTarget || null,
+      execution_ref: editedExecutionRef || null,
+      execution_url: editedExecutionUrl || null,
       reviewed_at: new Date().toISOString(),
     })
     setIsEditing(false)
@@ -147,13 +202,20 @@ export default function DetailPanel({ item, allItems, onClose, onUpdate, onDelet
       const response = await fetch('/api/promote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: item.id }),
+        body: JSON.stringify({
+          item_id: item.id,
+          target: editedExecutionTarget || undefined,
+          external_ref: editedExecutionRef || undefined,
+          external_url: editedExecutionUrl || undefined,
+          owner: editedOwner || undefined,
+          evidence: editedEvidence || undefined,
+        }),
       })
       const data = await response.json()
 
       if (response.ok && data.success) {
         setPromoteSuccess(true)
-        onUpdate(item.id, {
+        onUpdate(item.id, data.command_center_item || {
           status: 'promoted',
           disposition: 'promote',
           reviewed_at: new Date().toISOString(),
@@ -351,6 +413,117 @@ export default function DetailPanel({ item, allItems, onClose, onUpdate, onDelet
               {item.agent_confidence != null ? `${Math.round(item.agent_confidence * 100)}%` : 'Unset'}
             </span>
           </div>
+        </div>
+
+        <div className="bg-dark-700 rounded-lg p-3">
+          <div className="text-xs text-gray-500 mb-2">Outcome Loop</div>
+          {isEditing ? (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={editedOwner}
+                  onChange={(e) => setEditedOwner(e.target.value)}
+                  placeholder="owner"
+                  className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="datetime-local"
+                  value={editedRevisitAt}
+                  onChange={(e) => setEditedRevisitAt(e.target.value)}
+                  className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <select
+                value={editedOutcomeStatus}
+                onChange={(e) => setEditedOutcomeStatus(e.target.value as OutcomeStatus | '')}
+                className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="">No outcome</option>
+                {Object.entries(outcomeLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={editedDecisionNeeded}
+                onChange={(e) => setEditedDecisionNeeded(e.target.value)}
+                placeholder="decision needed"
+                className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <textarea
+                value={editedOutcomeNote}
+                onChange={(e) => setEditedOutcomeNote(e.target.value)}
+                rows={3}
+                placeholder="outcome note"
+                className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-gray-300 space-y-1">
+              <div>Owner: {item.owner || 'Unassigned'}</div>
+              <div>Revisit: {item.revisit_at ? new Date(item.revisit_at).toLocaleString() : 'Not scheduled'}</div>
+              <div>Outcome: {item.outcome_status ? outcomeLabels[item.outcome_status] : 'None'}</div>
+              <div>Decision: {item.decision_needed || 'None'}</div>
+              <div>Note: {item.outcome_note || 'None'}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-dark-700 rounded-lg p-3">
+          <div className="text-xs text-gray-500 mb-2">Execution Handoff</div>
+          {isEditing ? (
+            <div className="space-y-2">
+              <input
+                type="text"
+                value={editedExecutionTarget}
+                onChange={(e) => setEditedExecutionTarget(e.target.value)}
+                placeholder="target"
+                className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  value={editedExecutionRef}
+                  onChange={(e) => setEditedExecutionRef(e.target.value)}
+                  placeholder="external ref"
+                  className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                />
+                <input
+                  type="url"
+                  value={editedExecutionUrl}
+                  onChange={(e) => setEditedExecutionUrl(e.target.value)}
+                  placeholder="external URL"
+                  className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <textarea
+                value={editedEvidence}
+                onChange={(e) => setEditedEvidence(e.target.value)}
+                rows={3}
+                placeholder="evidence"
+                className="w-full bg-dark-800 border border-dark-600 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-gray-300 space-y-1">
+              <div>Target: {item.execution_target || item.promotion_target || 'None'}</div>
+              <div>External ref: {item.execution_ref || 'None'}</div>
+              <div>
+                External URL:{' '}
+                {item.execution_url ? (
+                  <a href={item.execution_url} target="_blank" rel="noreferrer" className="text-blue-300 hover:text-blue-200">
+                    {item.execution_url}
+                  </a>
+                ) : (
+                  'None'
+                )}
+              </div>
+              <div>Evidence: {item.evidence || 'None'}</div>
+            </div>
+          )}
         </div>
 
         {PROMOTION_ENABLED && (

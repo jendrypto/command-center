@@ -17,6 +17,7 @@ import {
   ITEM_CATEGORIES,
   ITEM_DISPOSITIONS,
   ITEM_STATUSES,
+  OUTCOME_STATUSES,
   isValidFocusArea,
 } from '@/lib/db'
 import { getAgentName } from '@/lib/config'
@@ -129,6 +130,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (body.outcome_status && !OUTCOME_STATUSES.includes(body.outcome_status)) {
+      return NextResponse.json(
+        { error: `Invalid outcome_status: ${body.outcome_status}` },
+        { status: 400 }
+      )
+    }
+
     const contentStr = typeof content === 'string' ? content : JSON.stringify(content)
 
     let tags: string[] = body.tags || []
@@ -167,6 +175,16 @@ export async function POST(request: NextRequest) {
       attention_reason: attentionReason,
       focus_area: body.focus_area || inferFocusArea(title, contentStr, tags),
       focus_score: body.focus_score ?? inferFocusScore(body.focus_area || inferFocusArea(title, contentStr, tags)),
+      owner: body.owner || null,
+      revisit_at: body.revisit_at || null,
+      decision_needed: body.decision_needed || null,
+      outcome_status: body.outcome_status || null,
+      outcome_note: body.outcome_note || null,
+      evidence: body.evidence || null,
+      superseded_by: body.superseded_by ?? null,
+      execution_target: body.execution_target || null,
+      execution_ref: body.execution_ref || null,
+      execution_url: body.execution_url || null,
     })
 
     events.emit('new-item', item)
@@ -246,6 +264,13 @@ export async function PUT(request: NextRequest) {
     if (updates.focus_area && !isValidFocusArea(updates.focus_area)) {
       return NextResponse.json(
         { error: `Invalid focus_area: ${updates.focus_area}` },
+        { status: 400 }
+      )
+    }
+
+    if (updates.outcome_status && !OUTCOME_STATUSES.includes(updates.outcome_status)) {
+      return NextResponse.json(
+        { error: `Invalid outcome_status: ${updates.outcome_status}` },
         { status: 400 }
       )
     }

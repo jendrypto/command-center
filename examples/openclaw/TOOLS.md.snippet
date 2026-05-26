@@ -5,8 +5,8 @@ All ten tools talk to the local Command Center workspace over MCP.
 ### Read
 
 - `get_workspace` — your primary read. First call in every triage pass.
-  Returns stats, recent items, attention queue, duplicate groups, oldest
-  open items, low-connection backlog, and existing connections.
+  Returns stats, active plan items, recent items, attention queue, duplicate
+  groups, oldest open items, low-connection backlog, and existing connections.
 - `get_attention` — shortcut for just the items needing review.
 - `search_items` — lookup by query string or filters (status, category,
   focus_area). Use this when resolving "is this a duplicate?" questions.
@@ -20,7 +20,9 @@ All ten tools talk to the local Command Center workspace over MCP.
   typically `related` or `duplicate`).
 - `disconnect_items` — remove a connection.
 - `promote_items` — push items to the configured promotion target.
-  Only use when the item has a clear owner and next action.
+  Only use when the item has a clear owner and next action. Include
+  `external_ref`, `external_url`, `owner`, and `evidence` when a real external
+  handoff exists.
 - `capture_item` — create a new item. Only use when you're capturing
   on behalf of your principal from a conversation or external source,
   not for moving existing items between states.
@@ -40,3 +42,10 @@ All updates take absolute values (set `status`, `disposition`, `focus_area`
 directly). Reapplying the same update is a no-op on field values but
 refreshes `updated_at`. This is intentional — if a cron pass is interrupted
 and retried, the result is the same state.
+
+### Outcome and handoff fields
+
+Use `owner`, `revisit_at`, `decision_needed`, `outcome_status`,
+`outcome_note`, `evidence`, and `superseded_by` to close loops. Use
+`execution_target`, `execution_ref`, and `execution_url` to record where a
+promoted item is being executed.

@@ -10,7 +10,7 @@ CRON_NAME="Command Center weekly consolidation"
 CRON_SCHEDULE="${CRON_SCHEDULE:-0 9 * * 0}"
 CRON_TZ="${CRON_TZ:-America/Los_Angeles}"
 
-MESSAGE="Run Command Center weekly consolidation. Call command_center.scan_queue_noise to find duplicate groups, stale repeats, noisy heartbeats, and orphaned items. Apply command_center.apply_queue_cleanup to merge duplicate groups (archive-duplicate-group with a primaryId), demote heartbeat clutter (demote-heartbeat-group), and archive stale backlog items over 14 days old. Report counts and any exceptions that need review. No action longer than one sentence per group."
+MESSAGE="Run Command Center weekly consolidation. Start with command_center.get_workspace. Call command_center.scan_queue_noise to find duplicate groups, stale repeats, noisy heartbeats, and orphaned items. Apply command_center.apply_queue_cleanup to merge duplicate groups (archive-duplicate-group with a primaryId), demote heartbeat clutter (demote-heartbeat-group), and archive stale backlog items over 14 days old. Close obvious outcomes with outcome_status, outcome_note, and evidence. Report counts and any exceptions that need review. No action longer than one sentence per group."
 
 echo "Scheduling: $CRON_NAME"
 echo "  cron: $CRON_SCHEDULE"

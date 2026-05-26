@@ -1,11 +1,11 @@
-# Running Command Center with openclaw
+# Running Command Center with OpenClaw
 
-A reference setup for wiring your [openclaw](https://docs.openclaw.ai) agent to Command Center. Drop-in snippets for your agent's bootstrap files plus install scripts that register the MCP server and schedule the daily/weekly triage cron.
+A reference setup for wiring your [OpenClaw](https://docs.openclaw.ai) agent to Command Center. Drop-in snippets for your agent's bootstrap files plus install scripts that register the MCP server and schedule the daily/weekly triage cron.
 
 ## Prerequisites
 
 - Command Center is cloned, configured, and running on `http://localhost:3005`.
-- openclaw is installed and reachable from the command line (`openclaw --version` works).
+- OpenClaw is installed and reachable from the command line (`openclaw --version` works).
 - The MCP server is built: `npm run mcp:build` from the repo root.
 
 ## One-time setup
@@ -17,11 +17,11 @@ A reference setup for wiring your [openclaw](https://docs.openclaw.ai) agent to 
 ./examples/openclaw/install-weekly-consolidation.sh
 ```
 
-Then paste the three `*.snippet` files into your openclaw workspace's `SOUL.md`, `AGENTS.md`, and `TOOLS.md`. These are overlays — append to whatever you already have.
+Then paste the three `*.snippet` files into your OpenClaw workspace's `SOUL.md`, `AGENTS.md`, and `TOOLS.md`. These are overlays — append to whatever you already have.
 
 ## What the install scripts do
 
-**`install-mcp.sh`** registers the Command Center MCP server with openclaw. Equivalent to running:
+**`install-mcp.sh`** registers the Command Center MCP server with OpenClaw. Equivalent to running:
 
 ```bash
 openclaw mcp set command-center '{
@@ -59,7 +59,7 @@ openclaw cron add \
 
 **`SOUL.md.snippet`** gives the agent a persona for this role: proactive, defaults to merge/archive, only surfaces exceptions.
 
-**`AGENTS.md.snippet`** explains the workspace contract: the state machine, which tools to call, what "promote" means.
+**`AGENTS.md.snippet`** explains the workspace contract: the state machine, which tools to call, what "promote" means, and how to close outcome loops.
 
 **`TOOLS.md.snippet`** gives usage guidance for the ten Command Center MCP tools so the agent batches writes, scopes cleanup to weekly, and doesn't run the expensive tools on every pass.
 

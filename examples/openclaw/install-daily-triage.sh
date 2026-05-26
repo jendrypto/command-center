@@ -15,7 +15,7 @@ CRON_NAME="Command Center daily triage"
 CRON_SCHEDULE="${CRON_SCHEDULE:-0 8 * * 1-5}"
 CRON_TZ="${CRON_TZ:-America/Los_Angeles}"
 
-MESSAGE="Run a Command Center triage pass. Start with command_center.get_workspace for the full snapshot, then process attention items, cluster related items, archive duplicates, and surface anything needing human review with a specific attention_reason. Batch all writes into a single command_center.update_items call. Digest under 200 words."
+MESSAGE="Run a Command Center triage pass. Start with command_center.get_workspace for the full snapshot, then process active_plan_items, attention items, duplicates, due reviews, and open outcomes. Cluster related items, archive duplicates, close obvious outcomes with evidence, and surface anything needing human review with a specific attention_reason. Batch all writes into a single command_center.update_items call. Digest under 200 words."
 
 echo "Scheduling: $CRON_NAME"
 echo "  cron: $CRON_SCHEDULE"

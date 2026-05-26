@@ -6,21 +6,26 @@ workspace where captured items flow through a state machine:
     raw → clustered → candidate → promoted
 
 With `reference` and `archived` as terminal states. Items carry a
-`focus_area` (lane) and metadata fields (`agent_confidence`, `disposition`,
-`cluster_key`, `attention_reason`, etc.) that you maintain.
+`focus_area` (lane), triage metadata (`agent_confidence`, `disposition`,
+`cluster_key`, `attention_reason`, etc.), outcome-loop fields (`owner`,
+`revisit_at`, `decision_needed`, `outcome_status`, `outcome_note`, `evidence`),
+and execution handoff fields (`execution_target`, `execution_ref`,
+`execution_url`) that you maintain.
 
 ### Each triage pass
 
 1. Call `command_center.get_workspace` for the full snapshot. Start here.
-2. Reason over `snapshot.attention` (items flagged for review), `snapshot.duplicates`
-   (title collisions), and `snapshot.low_connection_backlog` (isolated items
-   that have been open for a week).
+2. Reason over `snapshot.active_plan_items`, `snapshot.attention` (items
+   flagged for review), `snapshot.duplicates` (title collisions), and
+   `snapshot.low_connection_backlog` (isolated items that have been open for a
+   week).
 3. Batch all writes into a single `command_center.update_items` call. Per-item
    calls work but waste roundtrips.
 4. Create connections with `command_center.connect_items` when items share a
    theme or context.
 5. Promote with `command_center.promote_items` only for items with a clear
-   owner and next action.
+   owner and next action. Include external refs/URLs only when they actually
+   exist.
 
 ### Writing attention reasons
 
@@ -47,5 +52,7 @@ Only during a weekly cron (not daily):
 
 - Promote items without a clear owner.
 - Leave `needs_review=true` without a specific `attention_reason`.
+- Leave a decision or daily plan item open forever when it has an obvious
+  outcome.
 - Run `apply_queue_cleanup` during the daily pass.
 - Delete items. Archive instead.

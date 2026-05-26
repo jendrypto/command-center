@@ -3,10 +3,15 @@
  * Command Center MCP Server
  *
  * Thin stdio bridge that exposes the Command Center REST API as MCP tools.
- * Agents (openclaw, Claude Code, Claude Desktop, Cursor, etc.) connect over
+ * Agents (Hermes, OpenClaw, Claude Code, Claude Desktop, Cursor, etc.) connect over
  * stdio and can read the workspace, update items, promote, and run cleanup.
  *
- * Registration with openclaw:
+ * Registration with an MCP-aware runtime:
+ *   hermes mcp add command-center \
+ *     --command node \
+ *     --args /abs/path/to/command-center/mcp-server/dist/index.js \
+ *     --env COMMAND_CENTER_URL=http://localhost:3005
+ *
  *   openclaw mcp set command-center \
  *     '{"command":"node","args":["/abs/path/to/command-center/mcp-server/dist/index.js"],"env":{"COMMAND_CENTER_URL":"http://localhost:3005"}}'
  */
@@ -115,6 +120,16 @@ const ItemUpdate = z.object({
   focus_score: z.number().optional(),
   reviewed_at: z.string().optional(),
   agent_confidence: z.number().min(0).max(1).optional(),
+  owner: z.string().nullable().optional(),
+  revisit_at: z.string().nullable().optional(),
+  decision_needed: z.string().nullable().optional(),
+  outcome_status: z.string().nullable().optional(),
+  outcome_note: z.string().nullable().optional(),
+  evidence: z.string().nullable().optional(),
+  superseded_by: z.number().int().nullable().optional(),
+  execution_target: z.string().nullable().optional(),
+  execution_ref: z.string().nullable().optional(),
+  execution_url: z.string().nullable().optional(),
 });
 
 server.registerTool(
@@ -182,7 +197,11 @@ server.registerTool(
         .array(
           z.object({
             item_id: z.number().int(),
-            target: z.string(),
+            target: z.string().optional(),
+            external_ref: z.string().nullable().optional(),
+            external_url: z.string().nullable().optional(),
+            owner: z.string().nullable().optional(),
+            evidence: z.string().nullable().optional(),
           }),
         )
         .min(1),
@@ -207,6 +226,17 @@ server.registerTool(
       content: z.string().optional(),
       category: z.string().optional(),
       tags: z.array(z.string()).optional(),
+      status: z.string().optional(),
+      focus_area: z.string().optional(),
+      owner: z.string().nullable().optional(),
+      revisit_at: z.string().nullable().optional(),
+      decision_needed: z.string().nullable().optional(),
+      outcome_status: z.string().nullable().optional(),
+      outcome_note: z.string().nullable().optional(),
+      evidence: z.string().nullable().optional(),
+      execution_target: z.string().nullable().optional(),
+      execution_ref: z.string().nullable().optional(),
+      execution_url: z.string().nullable().optional(),
     }).shape,
   },
   async (item) =>

@@ -51,6 +51,22 @@ That's the whole pattern. The rest of the app never needs to know about the new 
 
 The REST API at `/api/agent` is the canonical contract. MCP is just a stdio wrapper. If your agent runtime doesn't speak MCP (or you want to avoid the subprocess), point it at the REST endpoints directly.
 
+Hermes and OpenClaw both work well through MCP plus scheduled cron prompts:
+
+```bash
+# Hermes
+hermes mcp add command-center \
+  --command node \
+  --args /abs/path/to/command-center/mcp-server/dist/index.js \
+  --env COMMAND_CENTER_URL=http://localhost:3005
+
+# OpenClaw
+openclaw mcp set command-center \
+  '{"command":"node","args":["/abs/path/to/command-center/mcp-server/dist/index.js"],"env":{"COMMAND_CENTER_URL":"http://localhost:3005"}}'
+```
+
+## API contract
+
 ### Triage loop
 
 One iteration:
@@ -70,6 +86,9 @@ One iteration:
     raw: number; clustered: number; candidate: number;
     promoted: number; reference: number; archived: number;
     needs_review: number;
+    due_reviews: number;
+    open_outcomes: number;
+    execution_handoffs: number;
     focus: Record<string, number>;    // by focus_area id
   };
   recent: Item[];                      // last 12 by created_at
@@ -77,6 +96,12 @@ One iteration:
   duplicates: Array<{ title_key, copies, item_ids }>;
   oldest_open: Item[];
   low_connection_backlog: Array<Item & { connection_count: number }>;
+  active_plan_items: Array<{
+    item_id: number;
+    plan_title: string;
+    line_number: number;
+    text: string;
+  }>;
   connections: Connection[];
   generated_at: string;                // ISO timestamp
 }
@@ -99,10 +124,27 @@ One iteration:
     focus_score?: number;
     reviewed_at?: string;
     agent_confidence?: number;         // 0–1
+    owner?: string | null;
+    revisit_at?: string | null;
+    decision_needed?: string | null;
+    outcome_status?: "open" | "decided" | "done" | "blocked" | "superseded" | "dropped" | null;
+    outcome_note?: string | null;
+    evidence?: string | null;
+    superseded_by?: number | null;
+    execution_target?: string | null;
+    execution_ref?: string | null;
+    execution_url?: string | null;
   }>;
   connections?: Array<{ source_id, target_id, relationship_type? }>;
   disconnects?: Array<{ source_id, target_id }>;
-  promotions?: Array<{ item_id, target? }>;
+  promotions?: Array<{
+    item_id: number;
+    target?: string;
+    external_ref?: string | null;
+    external_url?: string | null;
+    owner?: string | null;
+    evidence?: string | null;
+  }>;
 }
 ```
 
@@ -151,7 +193,7 @@ The MCP server exposes these tools over stdio:
 | `update_items` | `POST /api/agent` | Batch state/metadata updates |
 | `connect_items` | `POST /api/agent` | Link two items |
 | `disconnect_items` | `POST /api/agent` | Unlink two items |
-| `promote_items` | `POST /api/agent` | Promote to configured target |
+| `promote_items` | `POST /api/agent` | Promote to configured target and record handoff metadata |
 | `capture_item` | `POST /api/items` | Create a new item |
 | `scan_queue_noise` | `GET /api/queue-cleaner` | Report on duplicates/stale/heartbeats |
 | `apply_queue_cleanup` | `POST /api/queue-cleaner` | Cleanup actions |
@@ -160,7 +202,7 @@ All input/output is validated by zod schemas. See `mcp-server/index.ts` for the 
 
 ## Heartbeat (optional)
 
-If your agent uses openclaw's `HEARTBEAT.md` for periodic checks, you can have it include a Command Center status read by adding to your workspace's `HEARTBEAT.md`:
+If your agent uses workspace instructions for periodic checks, you can include a Command Center status read. For OpenClaw this often lives in `HEARTBEAT.md`; for Hermes it can live in the cron prompt or `AGENTS.md`/`TOOLS.md`.
 
 ```markdown
 ## Command Center pulse

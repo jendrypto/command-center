@@ -16,10 +16,12 @@ function ensureDbDir() {
 export const ITEM_CATEGORIES = ['ideas', 'conversations', 'research', 'bookmarks', 'decisions'] as const
 export const ITEM_STATUSES = ['raw', 'clustered', 'candidate', 'promoted', 'reference', 'archived'] as const
 export const ITEM_DISPOSITIONS = ['keep_incubating', 'connect_cluster', 'promote', 'reference', 'archive', 'merge_duplicate'] as const
+export const OUTCOME_STATUSES = ['open', 'decided', 'done', 'blocked', 'superseded', 'dropped'] as const
 
 export type ItemCategory = typeof ITEM_CATEGORIES[number]
 export type ItemStatus = typeof ITEM_STATUSES[number]
 export type ItemDisposition = typeof ITEM_DISPOSITIONS[number]
+export type OutcomeStatus = typeof OUTCOME_STATUSES[number]
 
 /**
  * Promotion target id — free-form string interpreted by the promotion plugin
@@ -38,7 +40,7 @@ export type FocusArea = string
 /** Runtime-computed list of focus area ids from the current config. */
 export const FOCUS_AREAS = getFocusAreaIds()
 
-const NEW_COLUMNS = [
+const LEGACY_REQUIRED_COLUMNS = [
   'reviewed_at',
   'agent_confidence',
   'disposition',
@@ -50,6 +52,33 @@ const NEW_COLUMNS = [
   'focus_area',
   'focus_score',
 ]
+
+const NEW_COLUMNS = [
+  ...LEGACY_REQUIRED_COLUMNS,
+  'owner',
+  'revisit_at',
+  'decision_needed',
+  'outcome_status',
+  'outcome_note',
+  'evidence',
+  'superseded_by',
+  'execution_target',
+  'execution_ref',
+  'execution_url',
+]
+
+const ADDITIVE_COLUMN_SQL: Record<string, string> = {
+  owner: 'ALTER TABLE items ADD COLUMN owner TEXT',
+  revisit_at: 'ALTER TABLE items ADD COLUMN revisit_at DATETIME',
+  decision_needed: 'ALTER TABLE items ADD COLUMN decision_needed TEXT',
+  outcome_status: 'ALTER TABLE items ADD COLUMN outcome_status TEXT',
+  outcome_note: 'ALTER TABLE items ADD COLUMN outcome_note TEXT',
+  evidence: 'ALTER TABLE items ADD COLUMN evidence TEXT',
+  superseded_by: 'ALTER TABLE items ADD COLUMN superseded_by INTEGER',
+  execution_target: 'ALTER TABLE items ADD COLUMN execution_target TEXT',
+  execution_ref: 'ALTER TABLE items ADD COLUMN execution_ref TEXT',
+  execution_url: 'ALTER TABLE items ADD COLUMN execution_url TEXT',
+}
 
 let db: sqlite3.Database | null = null
 
@@ -71,6 +100,16 @@ export interface Item {
   attention_reason?: string | null
   focus_area: FocusArea
   focus_score: number
+  owner?: string | null
+  revisit_at?: string | null
+  decision_needed?: string | null
+  outcome_status?: OutcomeStatus | null
+  outcome_note?: string | null
+  evidence?: string | null
+  superseded_by?: number | null
+  execution_target?: PromotionTarget | null
+  execution_ref?: string | null
+  execution_url?: string | null
   created_at: string
   updated_at: string
   connections?: number[]
@@ -114,9 +153,17 @@ async function initDb() {
   if (itemsExists) {
     const columns = await all(`PRAGMA table_info(items)`) as Array<{ name: string }>
     const names = new Set(columns.map((column) => column.name))
-    const needsMigration = NEW_COLUMNS.some((column) => !names.has(column))
-    if (needsMigration) {
+    const needsLegacyMigration = LEGACY_REQUIRED_COLUMNS.some((column) => !names.has(column))
+    if (needsLegacyMigration) {
       await migrateLegacySchema(database)
+    } else {
+      for (const column of NEW_COLUMNS) {
+        if (names.has(column)) continue
+        const sql = ADDITIVE_COLUMN_SQL[column]
+        if (sql) {
+          await run(sql)
+        }
+      }
     }
   }
 
@@ -203,9 +250,20 @@ function buildCreateItemsSql() {
       attention_reason TEXT,
       focus_area TEXT NOT NULL DEFAULT '${defaultFocus.replace(/'/g, "''")}',
       focus_score INTEGER NOT NULL DEFAULT 0,
+      owner TEXT,
+      revisit_at DATETIME,
+      decision_needed TEXT,
+      outcome_status TEXT CHECK(outcome_status IN ('open', 'decided', 'done', 'blocked', 'superseded', 'dropped')),
+      outcome_note TEXT,
+      evidence TEXT,
+      superseded_by INTEGER,
+      execution_target TEXT,
+      execution_ref TEXT,
+      execution_url TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (duplicate_of) REFERENCES items(id) ON DELETE SET NULL
+      FOREIGN KEY (duplicate_of) REFERENCES items(id) ON DELETE SET NULL,
+      FOREIGN KEY (superseded_by) REFERENCES items(id) ON DELETE SET NULL
     )
   `
 }
@@ -236,6 +294,9 @@ async function ensureIndexes() {
   await run(`CREATE INDEX IF NOT EXISTS idx_items_cluster_key ON items(cluster_key)`)
   await run(`CREATE INDEX IF NOT EXISTS idx_items_focus_area ON items(focus_area)`)
   await run(`CREATE INDEX IF NOT EXISTS idx_items_focus_score ON items(focus_score)`)
+  await run(`CREATE INDEX IF NOT EXISTS idx_items_revisit_at ON items(revisit_at)`)
+  await run(`CREATE INDEX IF NOT EXISTS idx_items_outcome_status ON items(outcome_status)`)
+  await run(`CREATE INDEX IF NOT EXISTS idx_items_execution_target ON items(execution_target)`)
   await run(`CREATE INDEX IF NOT EXISTS idx_connections_source ON connections(source_id)`)
   await run(`CREATE INDEX IF NOT EXISTS idx_connections_target ON connections(target_id)`)
 }
@@ -247,8 +308,10 @@ async function insertMigratedItem(database: sqlite3.Database, row: any) {
     `INSERT INTO items (
       id, title, content, category, tags, status, summary, reviewed_at,
       agent_confidence, disposition, duplicate_of, cluster_key, promotion_target,
-      needs_review, attention_reason, focus_area, focus_score, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      needs_review, attention_reason, focus_area, focus_score, owner, revisit_at,
+      decision_needed, outcome_status, outcome_note, evidence, superseded_by,
+      execution_target, execution_ref, execution_url, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       mapped.id,
       mapped.title,
@@ -267,6 +330,16 @@ async function insertMigratedItem(database: sqlite3.Database, row: any) {
       mapped.attention_reason || null,
       mapped.focus_area,
       mapped.focus_score,
+      mapped.owner || null,
+      mapped.revisit_at || null,
+      mapped.decision_needed || null,
+      mapped.outcome_status || null,
+      mapped.outcome_note || null,
+      mapped.evidence || null,
+      mapped.superseded_by ?? null,
+      mapped.execution_target || null,
+      mapped.execution_ref || null,
+      mapped.execution_url || null,
       mapped.created_at,
       mapped.updated_at,
     ]
@@ -348,6 +421,16 @@ function mapLegacyRow(row: any): Item {
     attention_reason: row.attention_reason || (needsReview ? 'Legacy inbox item needs agent classification' : null),
     focus_area: focusArea,
     focus_score: row.focus_score ?? inferFocusScore(focusArea),
+    owner: row.owner || null,
+    revisit_at: row.revisit_at || null,
+    decision_needed: row.decision_needed || null,
+    outcome_status: row.outcome_status || null,
+    outcome_note: row.outcome_note || null,
+    evidence: row.evidence || null,
+    superseded_by: row.superseded_by ?? null,
+    execution_target: row.execution_target || null,
+    execution_ref: row.execution_ref || null,
+    execution_url: row.execution_url || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -419,8 +502,10 @@ export async function createItem(item: CreateItemInput): Promise<Item> {
   const result = await run(
     `INSERT INTO items (
       title, content, category, tags, status, summary, reviewed_at, agent_confidence,
-      disposition, duplicate_of, cluster_key, promotion_target, needs_review, attention_reason, focus_area, focus_score
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      disposition, duplicate_of, cluster_key, promotion_target, needs_review, attention_reason,
+      focus_area, focus_score, owner, revisit_at, decision_needed, outcome_status, outcome_note,
+      evidence, superseded_by, execution_target, execution_ref, execution_url
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       item.title,
       item.content,
@@ -438,6 +523,16 @@ export async function createItem(item: CreateItemInput): Promise<Item> {
       item.attention_reason || null,
       focusArea,
       focusScore,
+      item.owner || null,
+      item.revisit_at || null,
+      item.decision_needed || null,
+      item.outcome_status || null,
+      item.outcome_note || null,
+      item.evidence || null,
+      item.superseded_by ?? null,
+      item.execution_target || null,
+      item.execution_ref || null,
+      item.execution_url || null,
     ]
   )
 
@@ -590,6 +685,46 @@ export async function updateItem(id: number, updates: Partial<Item>): Promise<It
     fields.push('focus_score = ?')
     values.push(computedFocusScore)
   }
+  if (updates.owner !== undefined) {
+    fields.push('owner = ?')
+    values.push(updates.owner)
+  }
+  if (updates.revisit_at !== undefined) {
+    fields.push('revisit_at = ?')
+    values.push(updates.revisit_at)
+  }
+  if (updates.decision_needed !== undefined) {
+    fields.push('decision_needed = ?')
+    values.push(updates.decision_needed)
+  }
+  if (updates.outcome_status !== undefined) {
+    fields.push('outcome_status = ?')
+    values.push(updates.outcome_status)
+  }
+  if (updates.outcome_note !== undefined) {
+    fields.push('outcome_note = ?')
+    values.push(updates.outcome_note)
+  }
+  if (updates.evidence !== undefined) {
+    fields.push('evidence = ?')
+    values.push(updates.evidence)
+  }
+  if (updates.superseded_by !== undefined) {
+    fields.push('superseded_by = ?')
+    values.push(updates.superseded_by)
+  }
+  if (updates.execution_target !== undefined) {
+    fields.push('execution_target = ?')
+    values.push(updates.execution_target)
+  }
+  if (updates.execution_ref !== undefined) {
+    fields.push('execution_ref = ?')
+    values.push(updates.execution_ref)
+  }
+  if (updates.execution_url !== undefined) {
+    fields.push('execution_url = ?')
+    values.push(updates.execution_url)
+  }
 
   if (fields.length === 0) {
     return getItemById(id)
@@ -693,13 +828,25 @@ export async function getItemsNeedingAttention(): Promise<Item[]> {
         OR status = 'candidate'
         OR (status = 'raw' AND datetime(created_at) < datetime('now', '-2 days'))
         OR (status = 'clustered' AND datetime(updated_at) < datetime('now', '-7 days'))
+        OR (
+          status NOT IN ('archived', 'promoted')
+          AND revisit_at IS NOT NULL
+          AND datetime(revisit_at) <= datetime('now')
+        )
+        OR (
+          status != 'archived'
+          AND decision_needed IS NOT NULL
+          AND (outcome_status IS NULL OR outcome_status = 'open' OR outcome_status = 'blocked')
+        )
      ORDER BY
        focus_score DESC,
        CASE
          WHEN needs_review = 1 THEN 1
-         WHEN status = 'candidate' THEN 2
-         WHEN status = 'raw' THEN 3
-         ELSE 4
+         WHEN revisit_at IS NOT NULL AND datetime(revisit_at) <= datetime('now') THEN 2
+         WHEN decision_needed IS NOT NULL AND (outcome_status IS NULL OR outcome_status = 'open' OR outcome_status = 'blocked') THEN 3
+         WHEN status = 'candidate' THEN 4
+         WHEN status = 'raw' THEN 5
+         ELSE 6
        END,
        datetime(updated_at) ASC`
   )
@@ -724,6 +871,9 @@ export interface WorkspaceStats {
   reference: number
   archived: number
   needs_review: number
+  due_reviews: number
+  open_outcomes: number
+  execution_handoffs: number
   /** Count of items per configured focus area id. */
   focus: Record<string, number>
 }
@@ -731,6 +881,22 @@ export interface WorkspaceStats {
 export async function getWorkspaceStats(): Promise<WorkspaceStats> {
   const rows = await query<any>(`SELECT status, COUNT(*) as count FROM items GROUP BY status`)
   const needsReview = await queryOne<any>(`SELECT COUNT(*) as count FROM items WHERE needs_review = 1`)
+  const dueReviews = await queryOne<any>(
+    `SELECT COUNT(*) as count FROM items
+     WHERE status != 'archived'
+       AND revisit_at IS NOT NULL
+       AND datetime(revisit_at) <= datetime('now')`
+  )
+  const openOutcomes = await queryOne<any>(
+    `SELECT COUNT(*) as count FROM items
+     WHERE status != 'archived'
+       AND decision_needed IS NOT NULL
+       AND (outcome_status IS NULL OR outcome_status = 'open' OR outcome_status = 'blocked')`
+  )
+  const executionHandoffs = await queryOne<any>(
+    `SELECT COUNT(*) as count FROM items
+     WHERE execution_target IS NOT NULL OR execution_ref IS NOT NULL OR execution_url IS NOT NULL`
+  )
   const focusRows = await query<any>(`SELECT focus_area, COUNT(*) as count FROM items GROUP BY focus_area`)
   const focus: Record<string, number> = {}
   for (const area of config.focusAreas) {
@@ -750,6 +916,9 @@ export async function getWorkspaceStats(): Promise<WorkspaceStats> {
     reference: 0,
     archived: 0,
     needs_review: needsReview?.count || 0,
+    due_reviews: dueReviews?.count || 0,
+    open_outcomes: openOutcomes?.count || 0,
+    execution_handoffs: executionHandoffs?.count || 0,
     focus,
   }
   for (const row of rows) {

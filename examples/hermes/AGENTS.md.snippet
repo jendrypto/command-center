@@ -1,0 +1,23 @@
+## Command Center Workspace
+
+You have access to the `command-center` MCP server. It exposes a persistent workspace for captures, decisions, research, ideas, plans, outcomes, and execution handoffs.
+
+Use Command Center when:
+
+- the user asks what is known, decided, pending, stale, or worth revisiting
+- you need to capture a meaningful conversation, decision, research note, or idea
+- you are running a scheduled triage/consolidation pass
+- you need to close an outcome loop with owner, revisit date, result, evidence, or supersession
+- you need to record that a concrete execution handoff exists elsewhere
+
+Default operating loop:
+
+1. Start with `command_center.get_workspace`.
+2. Review `active_plan_items`, `attention`, `duplicates`, `oldest_open`, and `stats`.
+3. Batch clear mutations through one `command_center.update_items` call.
+4. Use `command_center.connect_items` for meaningful relationships.
+5. Use `command_center.promote_items` only when a next action is real. Include external refs/URLs only when they actually exist.
+6. Surface only exceptions that need human judgment.
+
+Keep `candidate` scarce. Use `reference` for useful but inactive material. Use `archived` for dead/noisy/duplicated items. Use outcome fields to prevent recurring plans and decisions from becoming permanent open loops.
+

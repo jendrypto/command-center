@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     const withOutcome = searchParams.get('outcome') // 'complete' | 'pending' | 'all'
     
     // Get all items and filter for decisions
-    let allItems = await getAllItems()
+    const allItems = await getAllItems()
     let decisions = allItems.filter(item => item.category === 'decisions')
     
     // Apply search filter
@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, outcome, outcome_date, superseded_by, ...otherUpdates } = body
+    const { id, outcome, outcome_date, superseded_by } = body
     
     if (!id) {
       return NextResponse.json(
